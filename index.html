@@ -238,7 +238,8 @@ const EX = {
   pulldown:{name:"Jalón al pecho",region:"sup",m:{"Espalda":1,"Bíceps":.5}},
   widepull:{name:"Dominadas agarre ancho",region:"sup",bw:true,m:{"Espalda":1,"Bíceps":.5}},
   cardio:{name:"Cardio al 60–70% de tu FC máxima",cardio:true,knee:true,m:{}},
-  abd:{name:"Abducción de cadera en máquina o con banda",region:"inf",m:{"Glúteo":1}}
+  abd:{name:"Abducción de cadera en máquina o con banda",region:"inf",m:{"Glúteo":1}},
+  tke:{name:"Extensión terminal de rodilla con banda",region:"inf",knee:true,m:{"Cuádriceps":1}}
 };
 const MUSCLES = ["Pecho","Espalda","Hombro","Bíceps","Tríceps","Cuádriceps","Glúteo","Isquios","Lumbar","Gemelos","Abdomen"];
 const BASIC_PATTERNS = ["Sentadilla","Bisagra","Press horizontal","Press vertical","Tracción vertical"];
@@ -535,13 +536,13 @@ function parseRx(str){
   const reps = Array.from({length:sets},(_,i)=>r[Math.min(i,r.length-1)]);
   return {sets,reps,pct:m[3]?+m[3]:null};
 }
-function itemNote(it,w){ const b = (it.notes && it.notes[w-1]) || it.note || ""; const k = adapt()==="rodilla" ? KNEE_TIPS[it.key] : ""; return k ? (b ? b+" "+k : k) : b; }
+function itemNote(it,w){ if(adapt()==="rodilla" && KNEE_NOTE_REPLACE[it.key]) return KNEE_NOTE_REPLACE[it.key]; const b = (it.notes && it.notes[w-1]) || it.note || ""; const k = adapt()==="rodilla" ? KNEE_TIPS[it.key] : ""; return k ? (b ? b+" "+k : k) : b; }
 /* ---- Perfil de adaptación: lumbar (Sebastián), rodilla, ninguna ---- */
 function adapt(){ return S.settings.adapt || (S.settings.subs===false ? "ninguna" : BUILD.adapt); }
 function squatSteps(){ return adapt()==="rodilla" ? KNEE_SQUAT_STEPS : SQUAT_STEPS; }
 function painOn(e){ const a = adapt(); return !!e && (a==="lumbar" ? !!e.lumbar : a==="rodilla" ? !!e.knee && !e.cardio : false); }
 function painLabel(){ return adapt()==="rodilla" ? "Rodilla" : "Lumbar"; }
-const KNEE_NAMES = {press45:"Prensa 45° con recorrido limitado", legext:"Extensión de cuádriceps en rango cómodo", cardio:"Caminata en cinta inclinada al 60–70% de tu FC máxima"};
+const KNEE_NAMES = {hyper:"Hip thrust con barra", press45:"Prensa 45° con recorrido limitado", legext:"Extensión de cuádriceps en rango cómodo", cardio:"Caminata en cinta inclinada al 60–70% de tu FC máxima"};
 const KNEE_TIPS = {
   squat:"Baja solo hasta el cajón. Si la rodilla pasa de 3/10, sube la altura del cajón.",
   box:"Baja solo hasta el cajón. Si la rodilla pasa de 3/10, sube la altura del cajón.",
@@ -549,15 +550,22 @@ const KNEE_TIPS = {
   legext:"Trabaja en el rango que no moleste. Si duele al final de la extensión, no estires del todo.",
   lunge:"Paso corto y torso erguido. Si molesta la rodilla, reduce el recorrido.",
   abd:"Rodillas alineadas con los pies. Fortalecer cadera y rodilla juntas es lo que recomienda el consenso de dolor patelofemoral.",
-  cardio:"Sin bicicleta: camina en cinta con inclinación."
+  cardio:"Sin bicicleta: camina en cinta con inclinación.",
+  tke:"Banda anclada detrás de la rodilla. Pasa de rodilla un poco flexionada a recta y aprieta el cuádriceps 2\" arriba."
 };
-/* En el perfil de rodilla, los días con pierna suman abducción de cadera al final. */
-function blocksFor(M,day){
+/* Notas que se reemplazan (no se suman) en el perfil de rodilla, porque cambia el ejercicio. */
+const KNEE_NOTE_REPLACE = {hyper:"Hip thrust: espalda alta apoyada en el banco, pausa de 1\" arriba apretando glúteos, sin arquear la zona lumbar."};
+/* En el perfil de rodilla, los días con pierna suman al final un ejercicio extra que se alterna:
+   abducción de cadera (cadera) y extensión terminal de rodilla (cuádriceps). */
+const LEG_KEYS = ["squat","box","press45","legext","lunge"];
+const hasLegs = (M,day)=>M.T[day].some(b=>b.items.some(it=>LEG_KEYS.includes(it.key)));
+let _legOrder = null;
+function legOrder(){ if(_legOrder) return _legOrder; _legOrder = {}; let n = 0; SESS.forEach(x=>{ if(hasLegs(mesoOf(x.m),x.day)) _legOrder[x.id] = n++; }); return _legOrder; }
+function blocksFor(M,day,sid){
   const T = M.T[day];
-  if(adapt()!=="rodilla") return T;
-  const legs = T.some(b=>b.items.some(it=>["squat","box","press45","legext","lunge"].includes(it.key)));
-  if(!legs) return T;
-  return T.concat([one(P("abd"+day,"abd",rep("3x15",M.weeks)),rep("1'00\"",M.weeks))]);
+  if(adapt()!=="rodilla" || !hasLegs(M,day)) return T;
+  const k = sid!=null && legOrder()[sid]%2===1 ? "tke" : "abd";
+  return T.concat([one(P(k+day,k,rep("3x15",M.weeks)),rep("1'00\"",M.weeks))]);
 }
 function slotOf(M,it){
   const a = adapt();
@@ -704,6 +712,7 @@ document.addEventListener("focusout",()=>{ setTimeout(()=>{ if(needsRender) rend
 
 const MEANDER = `<svg class="meander" aria-hidden="true" preserveAspectRatio="none"><defs><pattern id="mk" width="24" height="12" patternUnits="userSpaceOnUse"><path d="M0 11H22V1H6V7H16V4H11" fill="none" stroke="currentColor" stroke-width="1.6"/></pattern></defs><rect width="100%" height="12" fill="url(#mk)"/></svg>`;
 function topbar(){ return `<div class="topbar"><span class="sync" id="sync">${syncHTML()}</span>${S.settings.name?`<span class="who">${esc(S.settings.name)}</span>`:""}</div>`; }
+const GROUP_SEQ_REST = "1'15\"";
 function chips(field,opts,cur,scope){
   return `<div class="chips">${opts.map(o=>`<button class="chip" data-chip="${field}" data-scope="${scope}" data-v="${esc(o)}" aria-pressed="${String(cur)===o}">${esc(o)}</button>`).join("")}</div>`;
 }
@@ -749,13 +758,21 @@ function viewHoy(){
     <label class="check"><input type="checkbox" data-s="breathing" ${s.breathing?"checked":""}><span>Respiración diafragmática y bracing, 5 minutos</span></label>
     <p class="note">La encuentras en Mente, tipo "Respiración 4-6".</p>
     <p class="q">Condición psicológica</p>${chips("psych",["Óptima","Buena","Normal","Negativa","Muy negativa"],s.psych,"s")}</div>`;
-  const T = blocksFor(M,meta.day);
-  T.forEach(block=>{
+  const T = blocksFor(M,meta.day,meta.id);
+  T.forEach((block,bi)=>{
     const items = block.items.filter(it=>it.rx[w-1]!=null);
     if(!items.length) return;
     if(block.kind==="group"){
-      h += `<section class="panel group"><div class="group-head"><h3>${esc(block.label)}</h3><span class="tag">${esc(block.rest[w-1])} entre ejercicios</span></div>`;
-      items.forEach(it=>h += exBlock(M,it,s,meta,w,null,true));
+      const seq = (s.gmode||{})[bi]==="seq";
+      const tog = `<div class="chips" style="margin:2px 0 6px">${[["Como está diseñado",""],["Ejercicio por ejercicio","seq"]].map(([l,v])=>`<button class="chip" data-gmode="${bi}" data-v="${v}" aria-pressed="${seq===(v==="seq")}">${l}</button>`).join("")}</div>`;
+      if(seq){
+        h += `<section class="panel group"><div class="group-head"><h3>${esc(block.label)}, por separado</h3><span class="tag">${GROUP_SEQ_REST} entre series</span></div>${tog}
+          <p class="note">Haz todas las series de un ejercicio antes de pasar al siguiente. Pensado para cuando el gimnasio no te deja ocupar varias estaciones a la vez.</p>`;
+        items.forEach(it=>h += exBlock(M,it,s,meta,w,GROUP_SEQ_REST,false));
+      } else {
+        h += `<section class="panel group"><div class="group-head"><h3>${esc(block.label)}</h3><span class="tag">${esc(block.rest[w-1])} entre ejercicios</span></div>${tog}`;
+        items.forEach(it=>h += exBlock(M,it,s,meta,w,null,true));
+      }
       h += `</section>`;
     } else {
       h += `<section class="panel">${exBlock(M,items[0],s,meta,w,block.rest[w-1],false)}</section>`;
@@ -1351,7 +1368,7 @@ function buildModel(){
     const meta = sessMeta(id); if(!meta) return;
     const M = mesoOf(meta.m);
     ds.push([id,meta.m,meta.idx,meta.week,meta.day,M.labels[meta.week-1],s.date||"",s.status||"",s.quality||"",s.psych||"",s.breathing?1:0,s.notes||""]);
-    const T = blocksFor(M,meta.day);
+    const T = blocksFor(M,meta.day,meta.id);
     T.forEach((b,bi)=>b.items.forEach(it=>{
       const log = s.ex && s.ex[it.id]; if(!log) return;
       const rx = parseRx(it.rx[meta.week-1]) || {};
@@ -1362,7 +1379,7 @@ function buildModel(){
         if(!(num(x.kg)!=null || num(x.reps)!=null || num(x.min)!=null)) return;
         const eff = effLoad(log,x,s.date), e = e1rm(log,x,s.date), rir = num(x.rir), reps = num(x.reps);
         const isBw = EX[log.key] && EX[log.key].bw && (log.modality||"corporal")==="corporal";
-        fs.push([`${id}-${it.id}-${i+1}`,id,s.date||"",meta.m,meta.week,meta.day,b.kind==="group"?b.label:"simple",log.name,log.pattern||"",log.role||"",log.modality||"",log.step!=null?log.step+1:"",i+1,
+        fs.push([`${id}-${it.id}-${i+1}`,id,s.date||"",meta.m,meta.week,meta.day,b.kind==="group"?(((s.gmode||{})[bi]==="seq")?b.label+" (por separado)":b.label):"simple",log.name,log.pattern||"",log.role||"",log.modality||"",log.step!=null?log.step+1:"",i+1,
           rx.reps?rx.reps[i]||"":"", rx.pct||"", num(x.kg)??"", isBw?r2(bwOn(s.date)):"", r2(eff), reps??"", rir??"", reps!=null&&rir!=null?reps+rir:"", num(x.pain)??"", r2(e),
           reps!=null&&rir!=null?(rir<=4?1:0):"", num(x.min)??"", x.note||"", num(x.pain)!=null?painLabel().toLowerCase():""]);
       });
@@ -1440,6 +1457,7 @@ document.addEventListener("click", e=>{
   }
   if(t.dataset.cafdel!=null){ const [d,id] = diaryOf(diaryDate); d.caf = (d.caf||[]).filter((_,i)=>i!==+t.dataset.cafdel); save(id); render(); return; }
   if(t.dataset.mmreset){ const n = t.dataset.mmreset; if(S.settings.mmap){ delete S.settings.mmap[n]; save("settings"); } mmOpen = n; toast("Mapa original restaurado"); render(); return; }
+  if(t.dataset.gmode!=null){ const [s,id] = curSession(); s.gmode = s.gmode||{}; if(t.dataset.v) s.gmode[t.dataset.gmode] = t.dataset.v; else delete s.gmode[t.dataset.gmode]; save(id); render(); return; }
   if(t.dataset.cafuse){ cafDraft = {m:t.dataset.cafuse, t:t.dataset.t, g:t.dataset.g}; render(); const g = $("#cafg"); if(g){ g.focus(); g.select(); } return; }
   if(t.dataset.water){ const [d,id] = diaryOf(diaryDate); d.water = Math.max(0,(num(d.water)||0)+(+t.dataset.water)); save(id); render(); return; }
   if(t.dataset.med){ if(MD.running) return; MD.type = t.dataset.med; render(); return; }
@@ -1469,7 +1487,7 @@ document.addEventListener("click", e=>{
     const mo = moments(d).find(x=>x.k===m); d.caf.push({t:tm,g,m,s:mo?suggest(d,mo).g:undefined}); cafDraft = {}; save(id); toast("Café registrado"); render();
   }
 });
-function findItem(M,meta,itemId){ let f = null; blocksFor(M,meta.day).forEach(b=>b.items.forEach(it=>{ if(it.id===itemId) f = it; })); return f; }
+function findItem(M,meta,itemId){ let f = null; blocksFor(M,meta.day,meta.id).forEach(b=>b.items.forEach(it=>{ if(it.id===itemId) f = it; })); return f; }
 document.addEventListener("input", e=>{
   const el = e.target;
   if(el.dataset.ex){
